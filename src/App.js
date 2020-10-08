@@ -26,7 +26,40 @@ const initialStories = [
     points: 10,
     objectID: 2
   },
+  {
+    title: 'Swift',
+    url: 'https://developer.apple.com',
+    author: 'Apple',
+    num_comments: 3,
+    points: 8,
+    objectID: 3
+  },
+  {
+    title: '.NET Framework',
+    url: 'https://microsoft.com',
+    author: 'Microsoft',
+    num_comments: 3,
+    points: 8,
+    objectID: 4
+  },
+  {
+    title: 'AWS Lambda',
+    url: 'https://aws.com',
+    author: 'Amazon',
+    num_comments: 3,
+    points: 9,
+    objectID: 5
+  },
 ]
+
+// simulate async fetching of data from an API
+const getAsyncStories = () =>
+  new Promise(resolve =>
+    setTimeout( 
+      () => resolve({ data: { stories: initialStories}}),
+      2000
+    )
+  );
 
 // custom hook
 const useSemiPersistentState = (key, initialState) => {
@@ -52,10 +85,29 @@ const useSemiPersistentState = (key, initialState) => {
 // Main App Component
 const App = () => {
 
-  const [searchTerm, setSearchTerm] = useSemiPersistentState('search', 'React');
+  const [searchTerm, setSearchTerm] = useSemiPersistentState('search', '');
 
   // load state for stories
-  const [stories, setStories] = React.useState(initialStories);
+  const [stories, setStories] = React.useState([]);
+
+  // loading indicator toggle
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  // error indicator toggle
+  const [isError, setIsError] = React.useState(false);
+
+  // simulate asyc fetching of stories
+  // Note empty dependency array, the side-effect only runs once
+  // when component renders for the first time
+  React.useEffect(() => {
+    setIsLoading(true);
+
+    getAsyncStories().then((result) => {
+      setStories(result.data.stories)
+      setIsLoading(false);
+    })
+    .catch(() => setIsError(true));
+  }, [])
 
   const handleRemoveStory = item => {
     const newStories = stories.filter(
@@ -94,7 +146,15 @@ const App = () => {
 
       <hr />
 
-      <List list={searchedStories} onRemoveItem={handleRemoveStory} />
+      {/* conditional render if error loading data */}
+      {isError && <p>Something went wrong...</p>}
+
+      {/* conditional rendering if loading data */}
+      {isLoading ? (
+        <p>Loading...</p>
+      ) : (
+        <List list={searchedStories} onRemoveItem={handleRemoveStory} />
+      )}
       
     </div>
   );
