@@ -52,6 +52,40 @@ const initialStories = [
   },
 ]
 
+// reducer function
+const storiesReducer = (state, action) => {
+  switch (action.type) {
+    case 'STORIES_FETCH_INIT':
+    return {
+      ...state,
+      isLoading: true,
+      isError: false
+    }  
+    case 'STORIES_FETCH_SUCCESS':
+      return {
+        ...state,
+        isLoading: false,
+        isError: false,
+        data: action.payload,
+      }
+    case 'STORIES_FETCH_FAILURE':
+      return {
+        ...state,
+        isLoading: false,
+        isError: true,
+      }
+    case 'REMOVE_STORY':
+      return {
+        ...state,
+        data: state.data.filter(
+          story => action.payload.objectID !== story.objectID
+        ) 
+      } 
+    default:
+      throw new Error()
+  }
+}
+
 // simulate async fetching of data from an API
 const getAsyncStories = () =>
   new Promise(resolve =>
@@ -87,41 +121,38 @@ const App = () => {
 
   const [searchTerm, setSearchTerm] = useSemiPersistentState('search', '');
 
-  // load state for stories
-  const [stories, setStories] = React.useState([]);
-
-  // loading indicator toggle
-  const [isLoading, setIsLoading] = React.useState(false);
-
-  // error indicator toggle
-  const [isError, setIsError] = React.useState(false);
+  // state for async data loading
+  const [stories, dispatchStories] = React.useReducer(storiesReducer, 
+    { data: [], isLoading: false, isError: false}
+  );
 
   // simulate asyc fetching of stories
   // Note empty dependency array, the side-effect only runs once
   // when component renders for the first time
   React.useEffect(() => {
-    setIsLoading(true);
+    dispatchStories({ type: 'STORIES_FETCH_INIT'});
 
     getAsyncStories().then((result) => {
-      setStories(result.data.stories)
-      setIsLoading(false);
+      dispatchStories({
+        type: 'STORIES_FETCH_SUCCESS',
+        payload: result.data.stories,
+      })
     })
-    .catch(() => setIsError(true));
+    .catch(() => dispatchStories({ type: 'STORIES_FETCH_FAILURE' }));
   }, [])
 
   const handleRemoveStory = item => {
-    const newStories = stories.filter(
-      story => item.objectID !== story.objectID
-    );
-
-    setStories(newStories);
+    dispatchStories({
+      type: 'REMOVE_STORY',
+      payload: item,
+    })
   }
 
   const handleSearch = event => {
     setSearchTerm(event.target.value);
   };
 
-  const searchedStories = stories.filter(story => 
+  const searchedStories = stories.data.filter(story => 
     story.title
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
@@ -147,10 +178,10 @@ const App = () => {
       <hr />
 
       {/* conditional render if error loading data */}
-      {isError && <p>Something went wrong...</p>}
+      {stories.isError && <p>Something went wrong...</p>}
 
       {/* conditional rendering if loading data */}
-      {isLoading ? (
+      {stories.isLoading ? (
         <p>Loading...</p>
       ) : (
         <List list={searchedStories} onRemoveItem={handleRemoveStory} />
