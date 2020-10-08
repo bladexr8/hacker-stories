@@ -1,56 +1,7 @@
 import React from 'react';
 
-// initial list of stories
-const initialStories = [
-  {
-    title: 'React',
-    url: 'https://reactjs.org',
-    author: 'Jordan Walke',
-    num_comments: 3,
-    points: 4,
-    objectID: 0
-  },
-  {
-    title: 'Redux',
-    url: 'https://redux.js.org',
-    author: 'Dan Abramov, Andrew Clark',
-    num_comments: 2,
-    points: 5,
-    objectID: 1
-  },
-  {
-    title: 'Nodejs',
-    url: 'https://nodejs.org',
-    author: 'Ryan Dahl',
-    num_comments: 3,
-    points: 10,
-    objectID: 2
-  },
-  {
-    title: 'Swift',
-    url: 'https://developer.apple.com',
-    author: 'Apple',
-    num_comments: 3,
-    points: 8,
-    objectID: 3
-  },
-  {
-    title: '.NET Framework',
-    url: 'https://microsoft.com',
-    author: 'Microsoft',
-    num_comments: 3,
-    points: 8,
-    objectID: 4
-  },
-  {
-    title: 'AWS Lambda',
-    url: 'https://aws.com',
-    author: 'Amazon',
-    num_comments: 3,
-    points: 9,
-    objectID: 5
-  },
-]
+// API Endpoint
+const API_ENDPOINT = 'https://hn.algolia.com/api/v1/search?query='
 
 // reducer function
 const storiesReducer = (state, action) => {
@@ -86,15 +37,6 @@ const storiesReducer = (state, action) => {
   }
 }
 
-// simulate async fetching of data from an API
-const getAsyncStories = () =>
-  new Promise(resolve =>
-    setTimeout( 
-      () => resolve({ data: { stories: initialStories}}),
-      2000
-    )
-  );
-
 // custom hook
 const useSemiPersistentState = (key, initialState) => {
   // useState React hook, uses initial state as an argument
@@ -119,7 +61,7 @@ const useSemiPersistentState = (key, initialState) => {
 // Main App Component
 const App = () => {
 
-  const [searchTerm, setSearchTerm] = useSemiPersistentState('search', '');
+  const [searchTerm, setSearchTerm] = useSemiPersistentState('search', 'React');
 
   // state for async data loading
   const [stories, dispatchStories] = React.useReducer(storiesReducer, 
@@ -130,16 +72,21 @@ const App = () => {
   // Note empty dependency array, the side-effect only runs once
   // when component renders for the first time
   React.useEffect(() => {
+    if (searchTerm === '') return;
+
     dispatchStories({ type: 'STORIES_FETCH_INIT'});
 
-    getAsyncStories().then((result) => {
-      dispatchStories({
-        type: 'STORIES_FETCH_SUCCESS',
-        payload: result.data.stories,
+    // get data from API
+    fetch(`${API_ENDPOINT}${searchTerm}`)
+      .then(response => response.json())
+      .then(result => {
+        dispatchStories({
+          type: 'STORIES_FETCH_SUCCESS',
+          payload: result.hits
+        });
       })
-    })
-    .catch(() => dispatchStories({ type: 'STORIES_FETCH_FAILURE' }));
-  }, [])
+      .catch(() => dispatchStories({ type: 'STORIES_FETCH_FAILURE' }));
+  }, [searchTerm]);
 
   const handleRemoveStory = item => {
     dispatchStories({
@@ -151,12 +98,6 @@ const App = () => {
   const handleSearch = event => {
     setSearchTerm(event.target.value);
   };
-
-  const searchedStories = stories.data.filter(story => 
-    story.title
-      .toLowerCase()
-      .includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div>
@@ -184,7 +125,7 @@ const App = () => {
       {stories.isLoading ? (
         <p>Loading...</p>
       ) : (
-        <List list={searchedStories} onRemoveItem={handleRemoveStory} />
+        <List list={stories.data} onRemoveItem={handleRemoveStory} />
       )}
       
     </div>
