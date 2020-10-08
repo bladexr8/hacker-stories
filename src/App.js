@@ -61,23 +61,37 @@ const useSemiPersistentState = (key, initialState) => {
 // Main App Component
 const App = () => {
 
+  // manage search term
   const [searchTerm, setSearchTerm] = useSemiPersistentState('search', 'React');
+
+  const [url, setUrl] = React.useState(
+    `${API_ENDPOINT}${searchTerm}`
+  );
+
+  const handleSearchInput = event => {
+    setSearchTerm(event.target.value);
+  }
+
+  const handleSearchSubmit = () => {
+    setUrl(`${API_ENDPOINT}${searchTerm}`)
+  }
 
   // state for async data loading
   const [stories, dispatchStories] = React.useReducer(storiesReducer, 
     { data: [], isLoading: false, isError: false}
   );
 
-  // simulate asyc fetching of stories
-  // Note empty dependency array, the side-effect only runs once
-  // when component renders for the first time
-  React.useEffect(() => {
-    if (searchTerm === '') return;
+  // re-usable function for fetching data from API
+  // this hook creates a memoized function every time its
+  // dependency array (searchTerm) changes. As a result, the
+  // useEffect hook runs again because it depends on the
+  // new function
+  const handleFetchStories = React.useCallback(() => {
 
     dispatchStories({ type: 'STORIES_FETCH_INIT'});
 
     // get data from API
-    fetch(`${API_ENDPOINT}${searchTerm}`)
+    fetch(url)
       .then(response => response.json())
       .then(result => {
         dispatchStories({
@@ -86,7 +100,12 @@ const App = () => {
         });
       })
       .catch(() => dispatchStories({ type: 'STORIES_FETCH_FAILURE' }));
-  }, [searchTerm]);
+  }, [url]);
+
+  // asyc fetching of stories from API
+  React.useEffect(() => {
+    handleFetchStories();
+  }, [handleFetchStories]);
 
   const handleRemoveStory = item => {
     dispatchStories({
@@ -107,10 +126,18 @@ const App = () => {
         id="search"
         value={searchTerm} 
         isFocused
-        onInputChange={handleSearch}
+        onInputChange={handleSearchInput}
       >
         <strong>Search:</strong>
       </InputWithLabel>
+
+      <button
+        type="button"
+        disabled={!searchTerm}
+        onClick={handleSearchSubmit}
+      >
+        Submit
+      </button>
 
       <p>
         Searching for <strong>{searchTerm}</strong>
