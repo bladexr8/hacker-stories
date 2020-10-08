@@ -73,8 +73,11 @@ const App = () => {
     setSearchTerm(event.target.value);
   }
 
-  const handleSearchSubmit = () => {
+  const handleSearchSubmit = event => {
     setUrl(`${API_ENDPOINT}${searchTerm}`)
+
+    // prevent browser refresh
+    event.preventDefault();
   }
 
   // state for async data loading
@@ -117,30 +120,15 @@ const App = () => {
     })
   }
 
-  const handleSearch = event => {
-    setSearchTerm(event.target.value);
-  };
-
   return (
     <div>
       <h1>My Hacker Stories</h1>
 
-      <InputWithLabel 
-        id="search"
-        value={searchTerm} 
-        isFocused
-        onInputChange={handleSearchInput}
-      >
-        <strong>Search:</strong>
-      </InputWithLabel>
-
-      <button
-        type="button"
-        disabled={!searchTerm}
-        onClick={handleSearchSubmit}
-      >
-        Submit
-      </button>
+      <SearchForm
+        searchTerm={searchTerm}
+        onSearchInput={handleSearchInput}
+        onSearchSubmit={handleSearchSubmit}
+      />
 
       <p>
         Searching for <strong>{searchTerm}</strong>
@@ -162,7 +150,32 @@ const App = () => {
   );
 };
 
-// Search Component
+// Search Form
+const SearchForm = ({
+  searchTerm,
+  onSearchInput,
+  onSearchSubmit
+}) => (
+  <form onSubmit={onSearchSubmit}>
+    <InputWithLabel 
+      id="search"
+      value={searchTerm} 
+      isFocused
+      onInputChange={onSearchInput}
+    >
+      <strong>Search:</strong>
+    </InputWithLabel>
+
+    <button
+      type="submit"
+      disabled={!searchTerm}
+    >
+      Submit
+    </button>
+  </form>
+)
+
+// Generic Input Component
 // A - create a "ref" with React's useRef hook. This contains a mutable "current" property.
 //     "ref" itself is a persistent value which stays intact over lifetime of React component
 // B - ref is passed to input field's JSX reserved "ref" attribute and the element
