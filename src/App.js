@@ -1,8 +1,16 @@
 import React from 'react';
 import axios from 'axios';
+import { sortBy } from 'lodash';
+
+import './App.css'
 
 // API Endpoint
 const API_ENDPOINT = 'https://hn.algolia.com/api/v1/search?query='
+
+const API_BASE = 'https://hn.algolia.com/api/v1';
+const API_SEARCH = '/search';
+const PARAM_SEARCH = 'query=';
+const PARAM_PAGE = 'page=';
 
 // reducer function
 const storiesReducer = (state, action) => {
@@ -18,7 +26,11 @@ const storiesReducer = (state, action) => {
         ...state,
         isLoading: false,
         isError: false,
-        data: action.payload,
+        data: 
+        action.payload.page === 0
+         ? action.payload.list
+         : action.payload.list.concat(action.payload.list),
+        page: action.payload.page,
       }
     case 'STORIES_FETCH_FAILURE':
       return {
@@ -59,30 +71,76 @@ const useSemiPersistentState = (key, initialState) => {
 
 }
 
+// track search history
+const extractSearchTerm = url => url
+                                  .substring(url.lastIndexOf('?') + 1, url.lastIndexOf('&'))
+                                  .replace(PARAM_SEARCH, '');
+
+const getLastSearches = urls => 
+  urls
+    .reduce((result, url, index) => {
+      const searchTerm = extractSearchTerm(url);
+
+      if (index === 0) {
+        return result.concat(searchTerm);
+      }
+
+      const previousSearchTerm = result[result.length - 1];
+
+      if (searchTerm === previousSearchTerm) {
+        return result;
+      } else {
+        return result.concat(searchTerm);
+      }
+    }, [])
+    .slice(-6)
+    .slice(0, -1);
+
+const getUrl = (searchTerm, page) => `${API_BASE}${API_SEARCH}?${PARAM_SEARCH}${searchTerm}&${PARAM_PAGE}${page}`;
+
 // Main App Component
 const App = () => {
 
   // manage search term
   const [searchTerm, setSearchTerm] = useSemiPersistentState('search', 'React');
 
-  const [url, setUrl] = React.useState(
-    `${API_ENDPOINT}${searchTerm}`
-  );
+  const [urls, setUrls] = React.useState([
+    getUrl(searchTerm, 0)
+  ]);
 
   const handleSearchInput = event => {
     setSearchTerm(event.target.value);
   }
 
   const handleSearchSubmit = event => {
-    setUrl(`${API_ENDPOINT}${searchTerm}`)
+    handleSearch(searchTerm, 0);
 
     // prevent browser refresh
     event.preventDefault();
   }
 
+  const handleLastSearch = searchTerm => {
+    setSearchTerm(searchTerm);
+    handleSearch(searchTerm, 0);
+  }
+
+  const handleSearch = (searchTerm, page) => {
+    const url = getUrl(searchTerm, page);
+    setUrls(urls.concat(url));
+  }
+
+  // pagination "More" button pressed
+  const handleMore = () => {
+    const lastUrl = urls[urls.length - 1];
+    const searchTerm = extractSearchTerm(lastUrl);
+    handleSearch(searchTerm, stories.page + 1);
+  }
+
+  const lastSearches = getLastSearches(urls);
+
   // state for async data loading
   const [stories, dispatchStories] = React.useReducer(storiesReducer, 
-    { data: [], isLoading: false, isError: false}
+    { data: [], page: 0, isLoading: false, isError: false}
   );
 
   // re-usable function for fetching data from API
@@ -97,16 +155,20 @@ const App = () => {
     try {
 
       // get data from API
-      const result = await axios.get(url);
+      const lastUrl = urls[urls.length -1];
+      const result = await axios.get(lastUrl);
 
       dispatchStories({
         type: 'STORIES_FETCH_SUCCESS',
-        payload: result.data.hits
+        payload: {
+          list: result.data.hits,
+          page: result.data.page
+        }
       });
     } catch {
       dispatchStories({ type: 'STORIES_FETCH_FAILURE'});
     }
-  }, [url]);
+  }, [urls]);
 
   // asyc fetching of stories from API
   React.useEffect(() => {
@@ -121,8 +183,8 @@ const App = () => {
   }
 
   return (
-    <div>
-      <h1>My Hacker Stories</h1>
+    <div className="container">
+      <h1 className="headline-primary">My Hacker Stories</h1>
 
       <SearchForm
         searchTerm={searchTerm}
@@ -130,25 +192,47 @@ const App = () => {
         onSearchSubmit={handleSearchSubmit}
       />
 
+      <LastSearches
+        lastSearches={lastSearches}
+        onLastSearch={handleLastSearch}
+      />
+
       <p>
         Searching for <strong>{searchTerm}</strong>
       </p>
 
-      <hr />
-
       {/* conditional render if error loading data */}
       {stories.isError && <p>Something went wrong...</p>}
+
+      <List list={stories.data} onRemoveItem={handleRemoveStory} />
 
       {/* conditional rendering if loading data */}
       {stories.isLoading ? (
         <p>Loading...</p>
       ) : (
-        <List list={stories.data} onRemoveItem={handleRemoveStory} />
+        <button type="button" onClick={handleMore}>
+          More
+        </button>  
       )}
       
     </div>
   );
 };
+
+// Last 5 Searches
+const LastSearches = ({ lastSearches, onLastSearch }) => (
+  <>
+    {lastSearches.map((searchTerm, index) => (
+        <button
+          key={searchTerm + index}
+          type="button"
+          onClick={() => onLastSearch(searchTerm)}
+        >
+          {searchTerm}
+        </button>
+      ))}
+  </>
+)
 
 // Search Form
 const SearchForm = ({
@@ -156,7 +240,7 @@ const SearchForm = ({
   onSearchInput,
   onSearchSubmit
 }) => (
-  <form onSubmit={onSearchSubmit}>
+  <form onSubmit={onSearchSubmit} className="search-form">
     <InputWithLabel 
       id="search"
       value={searchTerm} 
@@ -169,6 +253,7 @@ const SearchForm = ({
     <button
       type="submit"
       disabled={!searchTerm}
+      className="button button_large"
     >
       Submit
     </button>
@@ -201,7 +286,7 @@ const InputWithLabel = ({ id, value, type='text', onInputChange, isFocused, chil
     return (
       <>
       {/* React Fragment */}
-      <label htmlFor={id}>{children}</label>
+      <label htmlFor={id} className="label">{children}</label>
       &nbsp;
       {/* B */}
       <input
@@ -210,16 +295,72 @@ const InputWithLabel = ({ id, value, type='text', onInputChange, isFocused, chil
         type={type} 
         value={value} 
         autoFocus={isFocused} 
-        onChange={onInputChange} 
+        onChange={onInputChange}
+        className="input" 
       />
       </>
     );
 
 };
 
+// Column Sort Handlers
+const SORTS = {
+  NONE: list => list,
+  TITLE: list => sortBy(list, 'title'),
+  AUTHOR: list => sortBy(list, 'author'),
+  COMMENT: list => sortBy(list, 'num_comments').reverse(),
+  POINT: list => sortBy(list, 'points').reverse(),
+}
+
 // List Component
-const List = ({ list, onRemoveItem }) => 
-  list.map(item => <Item key={item.objectID} item={item} onRemoveItem={onRemoveItem} />);
+const List = ({ list, onRemoveItem }) => {
+  
+  // sort key for list
+  const [sort, setSort] = React.useState({
+    sortKey: 'NONE',
+    isReverse: false,
+  });
+
+  // Column Sorting Support
+  const handleSort = sortKey => {
+    const isReverse = sort.sortKey === sortKey && !sort.isReverse;
+    setSort({ sortKey: sortKey, isReverse: isReverse });
+  }
+
+  const sortFunction = SORTS[sort.sortKey];
+  const sortedList = sort.isReverse ? sortFunction(list).reverse() : sortFunction(list);
+
+  return (
+  <div>
+      <div style={{ display: 'flex '}}>
+        <span style={{ width: '40%' }}>
+          <button type="button" onClick={() => handleSort('TITLE')}>
+            Title
+          </button>
+        </span>
+        <span style={{ width: '30%' }}>
+          <button type="button" onClick={() => handleSort('AUTHOR')}>
+            Author
+          </button>
+        </span>
+        <span style={{ width: '10%' }}>
+          <button type="button" onClick={() => handleSort('COMMENT')}>
+            Comments
+          </button>
+        </span>
+        <span style={{ width: '10%' }}>
+          <button type="button" onClick={() => handleSort('POINT')}>
+            Points
+          </button>
+        </span>
+        <span style={{ width: '10%' }}>Actions</span>
+      </div>
+
+
+      {sortedList.map(item => ( <Item key={item.objectID} item={item} onRemoveItem={onRemoveItem} />))}
+  </div>
+  );
+  };
       
 // Item component
 const Item = ({ item, onRemoveItem }) => {
@@ -229,15 +370,15 @@ const Item = ({ item, onRemoveItem }) => {
     onRemoveItem(item);
 
   return (
-  <div>
-    <span>
+  <div className="item">
+    <span style={{ width: '40%' }}>
       <a href={item.url}>{item.title} </a>
     </span>
-    <span>{item.author} </span>
-    <span>{item.num_comments} </span>
-    <span>{item.points} </span>
-    <span>
-      <button type="button" onClick={handleRemoveItem}>
+    <span style={{ width: '30%' }}>{item.author} </span>
+    <span style={{ width: '10%' }}>{item.num_comments} </span>
+    <span style={{ width: '10%' }}>{item.points} </span>
+    <span style={{ width: '10%' }}>
+      <button type="button" onClick={handleRemoveItem} className="button button_small">
         Dismiss
       </button>
     </span>
